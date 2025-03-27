@@ -8,7 +8,6 @@ function App() {
 	const [files, setFiles] = useState([])
 	const [data, setData] = useState([])
 	const [params, setParams] = useState({ limit: 50, words: 50, page: 0 })
-	const [sortBy, setSortBy] = useState('idf')
 
 	const handleUpload = async e => {
 		e.preventDefault()
@@ -33,17 +32,39 @@ function App() {
 	const downloadExcel = () => {
 		if (!data.data?.length) return
 
-		const worksheet = XLSX.utils.json_to_sheet(
-			data.data.map(row => ({
-				Слово: row.word,
-				TF: row.tf.toFixed(2),
-				IDF: row.idf.toFixed(2),
-			}))
-		)
+		// 1. Сводная статистика
+		const stats = [
+			['Метрика', 'Значение'],
+			['Общее число слов', data.summary?.total_words],
+			['Уникальных слов', data.summary?.unique_words],
+			[
+				'Самое частое слово',
+				`${data.summary?.most_common_word?.word} (${data.summary?.most_common_word?.count})`,
+			],
+		]
 
+		// 2. Пустая строка
+		const separator = [[''], ['']]
+
+		// 3. Заголовки таблицы TF-IDF
+		const tableHeader = [['Слово', 'TF', 'IDF']]
+
+		// 4. Данные TF-IDF
+		const tableData = data.data.map(row => [
+			row.word,
+			row.tf.toFixed(2),
+			row.idf.toFixed(2),
+		])
+
+		// 5. Объединяем всё
+		const fullSheetData = [...stats, ...separator, ...tableHeader, ...tableData]
+
+		// 6. Создаём лист
+		const worksheet = XLSX.utils.aoa_to_sheet(fullSheetData)
+
+		// 7. Книга и экспорт
 		const workbook = XLSX.utils.book_new()
 		XLSX.utils.book_append_sheet(workbook, worksheet, 'TF-IDF')
-
 		const excelBuffer = XLSX.write(workbook, {
 			bookType: 'xlsx',
 			type: 'array',
@@ -54,14 +75,9 @@ function App() {
 		saveAs(blob, 'tfidf_results.xlsx')
 	}
 
-	const sortedData =
-		data.data &&
-		[...data.data].sort((a, b) =>
-			sortBy === 'idf' ? b.idf - a.idf : b.tf - a.tf
-		)
 	const startIndex = params.page * params.words
 	const endIndex = startIndex + params.words
-	const visibleWords = sortedData?.slice(startIndex, endIndex)
+	const visibleWords = data.data?.slice(startIndex, endIndex)
 
 	return (
 		<div className='container'>
@@ -126,10 +142,6 @@ function App() {
 						</tbody>
 					</table>
 					<br></br>
-					<select onChange={e => setSortBy(e.target.value)} value={sortBy}>
-						<option value='idf'>Сортировать по IDF</option>
-						<option value='tf'>Сортировать по TF</option>
-					</select>
 					<div style={{ margin: '20px 0' }}>
 						<input
 							type='number'
